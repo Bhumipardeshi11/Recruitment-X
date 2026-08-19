@@ -1,0 +1,27 @@
+{
+  "name": "recruitment-x",
+  "version": "1.0.0",
+  "description": "Full-Stack AI-Powered ATS Resume & Career Platform",
+  "private": true,
+  "scripts": {
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "build:server": "cd server && npm run build",
+    "build:client": "cd client && npm run build",
+    "prisma:generate": "cd server && npx prisma generate",
+    "prisma:migrate": "cd server && npx prisma migrate dev",
+    "prisma:seed": "cd server && npx prisma db seed"
+  },
+  "keywords": [
+    "ats",
+    "resume-builder",
+    "ai",
+    "career-platform",
+    "express",
+    "react",
+    "prisma",
+    "postgresql"
+  ],
+  "author": "RecruitmentX Team",
+  "license": "MIT"
+}

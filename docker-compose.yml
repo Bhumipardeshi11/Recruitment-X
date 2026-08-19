@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: recruitmentx_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: recruitmentx_user
+      POSTGRES_PASSWORD: recruitmentx_secret
+      POSTGRES_DB: recruitmentx_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recruitmentx_user -d recruitmentx_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: recruitmentx_server
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://recruitmentx_user:recruitmentx_secret@postgres:5432/recruitmentx_db?schema=public
+      JWT_SECRET: super_secret_jwt_key_recruitmentx_2026
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
