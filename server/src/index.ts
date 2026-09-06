@@ -1,19 +1,25 @@
-import app from './app';
-import { env } from './config/env';
-import { connectDB } from './config/db';
+import { app } from './app';
+import { config } from './config';
 
-const startServer = async () => {
-  await connectDB();
+const server = app.listen(config.port, () => {
+  console.log(`🚀 Server running on port ${config.port} in ${config.env} mode`);
+  console.log(`📚 API available at http://localhost:${config.port}${config.apiPrefix}`);
+});
 
-  const PORT = parseInt(env.PORT, 10) || 5000;
-  app.listen(PORT, () => {
-    console.log(`🚀 RecruitmentX Express API Server running on http://localhost:${PORT}`);
-    console.log(`📡 Health Check available at http://localhost:${PORT}/health`);
-    console.log(`⚡ API Router base path: http://localhost:${PORT}/api/v1`);
+const shutdown = (signal: string) => {
+  console.log(`\n${signal} received. Shutting down gracefully...`);
+  server.close(() => {
+    console.log('Server closed. Exiting process.');
+    process.exit(0);
   });
+  
+  setTimeout(() => {
+    console.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000);
 };
 
-startServer().catch((err) => {
-  console.error('Failed to start RecruitmentX API Server:', err);
-  process.exit(1);
-});
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+export { server };

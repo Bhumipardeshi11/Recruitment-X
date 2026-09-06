@@ -1,35 +1,34 @@
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
+import { Request } from 'express';
 
-const uploadDir = path.join(__dirname, '../../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
+  destination: (_req, _file, cb) => {
+    cb(null, path.join(process.cwd(), 'uploads'));
   },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+  filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname);
-    cb(null, `resume-${uniqueSuffix}${ext}`);
+    cb(null, `resume-${uuidv4()}${ext}`);
   },
 });
 
-const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowedTypes = ['.pdf', '.doc', '.docx', '.txt'];
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (allowedTypes.includes(ext)) {
+const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file format. Only PDF, DOC, DOCX, and TXT files are accepted.'));
+    cb(new Error('Only PDF and Word documents are allowed'));
   }
 };
 
-export const upload = multer({
+export const resumeUpload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
 });

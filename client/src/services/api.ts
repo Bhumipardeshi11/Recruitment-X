@@ -1,270 +1,132 @@
-import axios from 'axios';
+import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 
-const API_BASE_URL = 'http://localhost:5000/api/v1';
+const API_URL = (import.meta as any).env?.VITE_API_URL || '/api/v1';
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 10000,
-});
+class ApiClient {
+  private client: AxiosInstance;
+  private refreshPromise: Promise<string> | null = null;
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('rx_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+  constructor() {
+    this.client = axios.create({
+      baseURL: API_URL,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      withCredentials: true,
+    });
 
-export const JobService = {
-  analyzeJd: async (jdText: string, resumeText?: string) => {
-    try {
-      const res = await api.post('/jobs/analyze-jd', { jdText, resumeText });
-      return res.data;
-    } catch {
-      // Dynamic fallback algorithm if backend is starting
-      const jdLower = (jdText || '').toLowerCase();
-      const resumeLower = (resumeText || '').toLowerCase();
+    this.client.interceptors.request.use(
+      (config: InternalAxiosRequestConfig) => {
+        const accessToken = localStorage.getItem('accessToken');
+        if (accessToken && config.headers) {
+          config.headers.Authorization = `Bearer ${accessToken}`;
+        }
+        return config;
+      },
+      (error) => Promise.reject(error)
+    );
 
-      const requiredSkills = ['React', 'TypeScript', 'Node.js', 'Express', 'PostgreSQL', 'Prisma', 'AWS', 'Docker', 'GraphQL', 'Kubernetes'].filter(
-        sk => jdLower.includes(sk.toLowerCase())
-      );
-      if (requiredSkills.length === 0) {
-        requiredSkills.push('React', 'TypeScript', 'Node.js', 'Express', 'PostgreSQL');
+    this.client.interceptors.response.use(
+      (response) => response,
+      async (error: AxiosError) => {
+        const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+        if (error.response?.status === 401 && !originalRequest._retry) {
+          originalRequest._retry = true;
+
+          try {
+            const accessToken = await this.refreshAccessToken();
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+            }
+            return this.client(originalRequest);
+          } catch {
+            this.clearAuth();
+            window.location.href = '/login';
+            return Promise.reject(error);
+          }
+        }
+
+        return Promise.reject(error);
       }
+    );
+  }
 
-      const matchedSkills = requiredSkills.filter(sk => resumeLower.includes(sk.toLowerCase()) || true); // mock matched
-      const missingSkills = ['GraphQL', 'Kubernetes', 'CI/CD'].filter(sk => !matchedSkills.includes(sk));
-      const missingKeywords = ['GraphQL API', 'Kubernetes Helm', 'Microservices Architecture'];
-
-      const jobMatchPercentage = Math.round((matchedSkills.length / Math.max(1, requiredSkills.length)) * 100);
-
-      return {
-        success: true,
-        data: {
-          jobMatchPercentage: Math.min(96, Math.max(75, jobMatchPercentage)),
-          extractedRoleTitle: 'Senior Full-Stack Engineer',
-          matchedSkills: ['React', 'TypeScript', 'Node.js', 'Express', 'PostgreSQL', 'Prisma', 'AWS S3', 'Docker', 'REST API', 'Tailwind CSS'],
-          missingSkills: ['GraphQL', 'Kubernetes', 'CI/CD Pipelines'],
-          missingKeywords: ['GraphQL Schema', 'Kubernetes Orchestration', 'Microservices Design'],
-          recommendations: [
-            'Incorporate missing core skills into your Technical Skills section: GraphQL, Kubernetes, CI/CD Pipelines.',
-            'Add relevant experience bullet points demonstrating work with GraphQL Schema, Kubernetes Orchestration.',
-            'Outstanding alignment! You meet over 80% of required technical skills. Ensure your resume highlights metric accomplishments.',
-          ],
-        },
-      };
+  private async refreshAccessToken(): Promise<string> {
+    if (this.refreshPromise) {
+      return this.refreshPromise;
     }
-  },
 
-  getJobs: async () => {
+    this.refreshPromise = (async () => {
+      const response = await axios.post(`${API_URL}/auth/refresh`, {}, { withCredentials: true });
+      const { accessToken } = response.data;
+      localStorage.setItem('accessToken', accessToken);
+      return accessToken;
+    })();
+
     try {
-      const res = await api.get('/jobs');
-      return res.data;
-    } catch {
-      return {
-        success: true,
-        data: [
-          {
-            id: 'job-1',
-            title: 'Senior Full-Stack Engineer (React & Express)',
-            company: 'Vanguard AI Labs',
-            location: 'San Francisco, CA (Hybrid)',
-            employmentType: 'FULL_TIME',
-            salaryRange: '$150,000 - $190,000',
-            description: 'Building high-scale recruitment and career analytics engine powered by AI.',
-            requiredSkills: ['React', 'TypeScript', 'Node.js', 'Express', 'PostgreSQL', 'Prisma', 'Tailwind CSS'],
-            preferredSkills: ['AWS', 'Docker', 'Google Gemini AI'],
-            minExperienceYears: 3,
-            status: 'ACTIVE',
-            createdAt: new Date().toISOString(),
-          },
-        ],
-      };
+      return await this.refreshPromise;
+    } finally {
+      this.refreshPromise = null;
     }
-  },
+  }
 
-  createJob: async (jobData: any) => {
-    try {
-      const res = await api.post('/jobs', jobData);
-      return res.data;
-    } catch {
-      return {
-        success: true,
-        data: { id: 'job-' + Date.now(), ...jobData, status: 'ACTIVE', createdAt: new Date().toISOString() },
-      };
-    }
-  },
-};
+  private clearAuth(): void {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('user');
+  }
 
-export const AtsService = {
-  scoreResume: async (resumeText: string, targetJdText?: string) => {
-    try {
-      const res = await api.post('/ats/score', { resumeText, targetJdText });
-      return res.data;
-    } catch {
-      const textLower = (resumeText || '').toLowerCase();
-      const matched = ['React', 'TypeScript', 'Node.js', 'Express', 'PostgreSQL', 'Prisma', 'Tailwind CSS', 'AWS', 'Docker', 'REST API'].filter(
-        k => textLower.includes(k.toLowerCase())
-      );
-      const missing = ['GraphQL', 'Kubernetes', 'Redis', 'CI/CD'].filter(
-        k => !textLower.includes(k.toLowerCase())
-      );
+  async register(data: { email: string; password: string; firstName: string; lastName: string; role?: string }) {
+    const response = await this.client.post('/auth/register', data);
+    return response.data;
+  }
 
-      const overallAtsScore = Math.min(98, 65 + matched.length * 3);
+  async login(credentials: { email: string; password: string; rememberMe?: boolean }) {
+    const response = await this.client.post('/auth/login', credentials);
+    return response.data;
+  }
 
-      return {
-        success: true,
-        data: {
-          overallAtsScore,
-          keywordMatchScore: Math.min(100, matched.length * 10),
-          formattingScore: 90,
-          impactScore: 88,
-          dimensions: [
-            { name: 'Formatting & Layout', score: 90, status: 'EXCELLENT', details: 'Section margins, bullet points, font hierarchy' },
-            { name: 'Keyword Alignment', score: Math.min(100, matched.length * 10), status: 'EXCELLENT', details: `${matched.length} matching technical terms` },
-          ],
-          problems: [],
-          matchedKeywords: matched,
-          missingKeywords: missing,
-          weakBullets: [],
-          strengths: ['High density of core technical terms'],
-          improvementSuggestions: ['Incorporate missing cloud keywords like GraphQL and Kubernetes.'],
-        },
-      };
-    }
-  },
-};
+  async logout() {
+    const response = await this.client.post('/auth/logout');
+    this.clearAuth();
+    return response.data;
+  }
 
-export const ResumeService = {
-  uploadResumeFile: async (file: File, title?: string) => {
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      if (title) formData.append('title', title);
+  async getProfile() {
+    const response = await this.client.get('/auth/profile');
+    return response.data;
+  }
 
-      const res = await api.post('/resumes/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      return res.data;
-    } catch (err: any) {
-      if (err.response?.data) return err.response.data;
-      return {
-        success: true,
-        message: 'Resume parsed and structured in PostgreSQL successfully',
-        data: {
-          resume: { id: 'res-' + Date.now(), title: file.name + ' - Parsed' },
-          parsedData: { summary: 'Senior Engineer', skills: [], experience: [], education: [] },
-          atsAnalysis: { overallAtsScore: 94 },
-        },
-      };
-    }
-  },
+  async updateProfile(data: { firstName?: string; lastName?: string; avatar?: string | null }) {
+    const response = await this.client.patch('/auth/profile', data);
+    return response.data;
+  }
 
-  getUserResumes: async () => {
-    try {
-      const res = await api.get('/resumes');
-      return res.data;
-    } catch {
-      return { success: true, data: [] };
-    }
-  },
-};
+  async changePassword(data: { currentPassword: string; newPassword: string }) {
+    const response = await this.client.post('/auth/change-password', data);
+    this.clearAuth();
+    return response.data;
+  }
 
-export const AuthService = {
-  login: async (email: string, password: string) => {
-    try {
-      const res = await api.post('/auth/login', { email, password });
-      return res.data;
-    } catch (err: any) {
-      if (err.response?.data) return err.response.data;
-      return {
-        success: true,
-        data: {
-          token: 'demo-jwt-token-2026',
-          user: { id: 'user-demo-1', email, fullName: 'Alex Vance', role: 'CANDIDATE' },
-        },
-      };
-    }
-  },
+  async checkAuth() {
+    const response = await this.client.get('/auth/check');
+    return response.data;
+  }
 
-  register: async (email: string, password: string, fullName: string, role: 'CANDIDATE' | 'RECRUITER') => {
-    try {
-      const res = await api.post('/auth/register', { email, password, fullName, role });
-      return res.data;
-    } catch (err: any) {
-      if (err.response?.data) return err.response.data;
-      return {
-        success: true,
-        data: {
-          token: 'demo-jwt-token-2026',
-          user: { id: 'user-' + Date.now(), email, fullName, role },
-        },
-      };
-    }
-  },
+  async forgotPassword(email: string) {
+    const response = await this.client.post('/auth/forgot-password', { email });
+    return response.data;
+  }
 
-  logout: async () => {
-    try {
-      const res = await api.post('/auth/logout');
-      return res.data;
-    } catch {
-      return { success: true };
-    }
-  },
+  async resetPassword(token: string, password: string) {
+    const response = await this.client.post('/auth/reset-password', { token, password });
+    return response.data;
+  }
 
-  getMe: async () => {
-    try {
-      const res = await api.get('/auth/me');
-      return res.data;
-    } catch {
-      return {
-        success: true,
-        data: { id: 'user-demo-1', email: 'alex.vance@recruitmentx.ai', fullName: 'Alex Vance', role: 'CANDIDATE' },
-      };
-    }
-  },
-};
+  async verifyEmail(token: string) {
+    const response = await this.client.get(`/auth/verify-email?token=${token}`);
+    return response.data;
+  }
+}
 
-export const GitHubService = {
-  auditProfile: async (username: string) => {
-    try {
-      const res = await api.get(`/github/audit/${username}`);
-      return res.data;
-    } catch {
-      return {
-        success: true,
-        data: { username, publicReposCount: 22, totalStars: 64, totalForks: 18, technicalScore: 92 },
-      };
-    }
-  },
-};
-
-export const AiService = {
-  generateCoverLetter: async (data: { resumeSummary: string; jobTitle: string; companyName: string; jdDescription?: string }) => {
-    try {
-      const res = await api.post('/ai/cover-letter', data);
-      return res.data;
-    } catch {
-      return {
-        success: true,
-        data: { coverLetter: `Dear Hiring Manager at ${data.companyName},\n\nI am writing to express my interest in the ${data.jobTitle} position.` },
-      };
-    }
-  },
-  enhanceBullets: async (bullets: string[]) => {
-    try {
-      const res = await api.post('/ai/enhance-bullets', { bullets });
-      return res.data;
-    } catch {
-      return {
-        success: true,
-        data: { bullets: bullets.map(b => `Architected and optimized ${b.replace(/^[-•*]\s*/, '')}, improving system throughput by 38%.`) },
-      };
-    }
-  },
-};
+export const api = new ApiClient();

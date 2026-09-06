@@ -1,30 +1,103 @@
-import { Response, NextFunction } from 'express';
-import { AuthRequest } from '../types';
-import { verifyToken } from '../utils/jwt';
+import { Request, Response, NextFunction } from 'express';
+import { verifyAccessToken, TokenPayload } from '../utils/jwt';
+import { AuthenticationError, AuthorizationError } from '../middleware/errorHandler';
+import { prisma } from '../config/prisma';
 
-export const authenticate = (req: AuthRequest, res: Response, next: NextFunction): void => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ success: false, error: 'Unauthorized: Missing or invalid token header.' });
-    return;
-  }
+export interface AuthenticatedRequest extends Request {
+  user?: TokenPayload;
+  userId?: string;
+}
 
-  const token = authHeader.split(' ')[1];
+export const authMiddleware = async (
+  req: AuthenticatedRequest,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
   try {
-    const decoded = verifyToken(token);
-    req.user = decoded;
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new AuthenticationError('No token provided');
+    }
+
+    const token = authHeader.split(' ')[1];
+    const payload = verifyAccessToken(token);
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, email: true, role: true, isEmailVerified: true },
+    });
+
+    if (!user) {
+      throw new AuthenticationError('User not found');
+    }
+
+    req.user = payload;
+    req.userId = payload.userId;
     next();
   } catch (error) {
-    res.status(401).json({ success: false, error: 'Unauthorized: Invalid or expired token.' });
+    next(error);
   }
 };
 
-export const requireRole = (roles: Array<'CANDIDATE' | 'RECRUITER' | 'ADMIN'>) => {
-  return (req: AuthRequest, res: Response, next: NextFunction): void => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      res.status(403).json({ success: false, error: 'Forbidden: Insufficient privileges for this action.' });
-      return;
+export const optionalAuthMiddleware = async (
+  req: AuthenticatedRequest,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return next();
+    }
+
+    const token = authHeader.split(' ')[1];
+    const payload = verifyAccessToken(token);
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, email: true, role: true, isEmailVerified: true },
+    });
+
+    if (user) {
+      req.user = payload;
+      req.userId = payload.userId;
     }
     next();
+  } catch {
+    next();
+  }
+};
+
+export const requireRole = (...roles: string[]) => {
+  return (req: AuthenticatedRequest, _res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      throw new AuthenticationError('Authentication required');
+    }
+
+    if (!roles.includes(req.user.role)) {
+      throw new AuthorizationError('Insufficient permissions');
+    }
+
+    next();
   };
+};
+
+export const requireVerifiedEmail = (
+  req: AuthenticatedRequest,
+  _res: Response,
+  next: NextFunction
+): void => {
+  if (!req.user) {
+    throw new AuthenticationError('Authentication required');
+  }
+
+  const user = req.user as TokenPayload & { isEmailVerified?: boolean };
+
+  if (!user.isEmailVerified) {
+    throw new AuthorizationError('Email verification required');
+  }
+
+  next();
 };

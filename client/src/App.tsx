@@ -1,67 +1,82 @@
-import React, { useState } from 'react';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import { Navbar } from './components/Navbar';
-import { Dashboard } from './components/Dashboard';
-import { ResumeUpload } from './components/ResumeUpload';
-import { JdAnalyzer } from './components/JdAnalyzer';
-import { AtsScorer } from './components/AtsScorer';
-import { ResumeBuilder } from './components/ResumeBuilder';
-import { GitHubAudit } from './components/GitHubAudit';
-import { JobMatcher } from './components/JobMatcher';
-import { RecruiterDashboard } from './components/RecruiterDashboard';
-import { AiAssistant } from './components/AiAssistant';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from './store/authContext';
+import { Layout } from './components/Layout';
+import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { ProfilePage } from './pages/ProfilePage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { VerifyEmailPage } from './pages/VerifyEmailPage';
 
-function MainContent() {
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const { user } = useAuth();
+const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({ children, roles }) => {
+  const { isAuthenticated, isLoading, user } = useAuth();
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary-500 border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (roles && user && !roles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary-500 border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+const AppRoutes: React.FC = () => {
   return (
-    <div className="min-h-screen flex flex-col bg-[#080c14] text-slate-100 font-sans selection:bg-indigo-600 selection:text-white">
-      {/* Navigation Header */}
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+    <Routes>
+      <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+      <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+      <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
+      <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
+      <Route path="/verify-email" element={<PublicRoute><VerifyEmailPage /></PublicRoute>} />
 
-      {/* Main Module Content */}
-      <main className="flex-1 px-4 lg:px-8 pb-12">
-        {activeTab === 'dashboard' && <Dashboard setActiveTab={setActiveTab} />}
-        {activeTab === 'upload' && <ResumeUpload />}
-        {activeTab === 'jd-analyzer' && <JdAnalyzer />}
-        {activeTab === 'ats' && <AtsScorer />}
-        {activeTab === 'builder' && <ResumeBuilder />}
-        {activeTab === 'github' && <GitHubAudit />}
-        {activeTab === 'jobs' && <JobMatcher />}
-        {activeTab === 'ai' && <AiAssistant />}
-        {activeTab === 'recruiter' && user?.role === 'RECRUITER' && <RecruiterDashboard />}
-        {activeTab === 'recruiter' && user?.role !== 'RECRUITER' && (
-          <div className="max-w-xl mx-auto my-16 text-center space-y-4 glass-panel p-8 rounded-3xl border border-rose-500/20">
-            <h2 className="text-2xl font-bold text-rose-400 font-outfit">Recruiter Access Restricted</h2>
-            <p className="text-sm text-slate-400">
-              The Recruiter Talent Portal is restricted to hiring manager accounts. Please sign in with a Recruiter role account to manage job listings and candidate pipelines.
-            </p>
-          </div>
-        )}
-      </main>
+      <Route
+        element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+      </Route>
 
-      {/* Footer */}
-      <footer className="glass-panel border-t border-slate-800/80 py-6 px-4 lg:px-8 no-print">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
-          <div>
-            <span className="font-bold text-white font-outfit">RecruitmentX Platform</span> — Full-Stack AI-Powered ATS & Career Engine
-          </div>
-          <div className="flex items-center gap-4 font-mono text-[11px]">
-            <span>React + Vite</span> • <span>Node.js Express</span> • <span>JD Skill Matcher</span> • <span>Prisma PostgreSQL</span>
-          </div>
-        </div>
-      </footer>
-    </div>
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
   );
-}
+};
 
-export function App() {
-  return (
-    <AuthProvider>
-      <MainContent />
-    </AuthProvider>
-  );
-}
+const App: React.FC = () => {
+  return <AppRoutes />;
+};
 
 export default App;

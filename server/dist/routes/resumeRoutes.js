@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const resumeController_1 = require("../controllers/resumeController");
+const upload_1 = require("../middleware/upload");
+const router = (0, express_1.Router)();
+router.post('/upload', upload_1.upload.single('file'), resumeController_1.ResumeController.uploadResumeFile);
+router.post('/', upload_1.upload.single('file'), resumeController_1.ResumeController.createResume);
+router.get('/', resumeController_1.ResumeController.getUserResumes);
+router.get('/:id', resumeController_1.ResumeController.getResumeById);
+router.put('/:id', resumeController_1.ResumeController.updateResume);
+router.delete('/:id', resumeController_1.ResumeController.deleteResume);
+exports.default = router;
