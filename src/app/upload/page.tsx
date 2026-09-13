@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/navigation/Navbar';
+import GitHubEvidence from '../../components/github/GitHubEvidence';
 import {
   Upload, FileText, X, AlertCircle, Briefcase,
   Building2, ChevronRight, ArrowRight, CheckCircle,
@@ -305,7 +306,7 @@ export default function UploadPage() {
                 </button>
               </div>
             )}
-
+            
             <p className="text-center text-slate-500 text-sm mt-5">
               Want to test without a file?{' '}
               <button onClick={() => setStep('job')} className="text-orange-400 hover:underline font-semibold">
@@ -348,7 +349,7 @@ export default function UploadPage() {
                 </div>
               )}
             </div>
-
+                <GitHubEvidence />
             <button
               id="upload-continue-btn"
               onClick={() => setStep('job')}
