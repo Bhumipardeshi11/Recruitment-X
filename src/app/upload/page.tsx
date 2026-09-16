@@ -3,7 +3,6 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/navigation/Navbar';
-import GitHubEvidence from '../../components/github/GitHubEvidence';
 import {
   Upload, FileText, X, AlertCircle, Briefcase,
   Building2, ChevronRight, ArrowRight, CheckCircle,
@@ -349,7 +348,7 @@ export default function UploadPage() {
                 </div>
               )}
             </div>
-                <GitHubEvidence />
+              
             <button
               id="upload-continue-btn"
               onClick={() => setStep('job')}
